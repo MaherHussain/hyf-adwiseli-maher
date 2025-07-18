@@ -1,0 +1,365 @@
+generator client {
+    provider        = "prisma-client-js"
+    previewFeatures = ["prismaSchemaFolder"]
+}
+
+datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+}
+
+// --- Enums and Models from auth.prisma ---
+enum AdwiseliPlatform {
+    INFLUENCER
+    BRAND
+}
+
+model User {
+    id String @id @default(cuid())
+    firstName String
+    lastName  String
+    email    String @unique
+    password String
+    sessions   Session[]
+    brandUsers BrandUser[]
+    createdAt DateTime @default(now())
+}
+
+model Influencer {
+    id String @id @default(cuid())
+    email    String @unique
+    password String
+    fullName String?
+    country   String?
+    gender    String?
+    birthday  DateTime?
+    interests Int[]
+    lastActiveAt DateTime?
+    createdAt    DateTime  @default(now())
+    onboarded Boolean @default(false)
+    fake Boolean @default(false)
+    socialAccounts     SocialAccount[]
+    sessions           Session[]
+    conversations      Conversation[]
+    messages           Message[]
+    matchmakingResults CampaignCreatorMatchmakingResult[]
+    notifications      Notification[]
+    @@index([id])
+    @@index([fullName])
+    @@index([id, fullName, gender])
+}
+
+model Session {
+    id String @id @default(uuid())
+    userId       String?
+    user         User?       @relation(fields: [userId], references: [id])
+    influencerId String?
+    influencer   Influencer? @relation(fields: [influencerId], references: [id])
+    accessToken  String @unique
+    refreshToken String @unique
+    expiresAt             DateTime
+    refreshTokenExpiresAt DateTime
+    createdAt DateTime @default(now())
+    @@index([userId])
+}
+
+// --- Enums and Models from brand.prisma ---
+enum BrandRole {
+    OWNER
+    ADMIN
+}
+
+model Brand {
+    id   String @id @unique @default(cuid())
+    name String
+    iconId       String?
+    iconProvider StorageProvider?
+    messages      Message[]
+    conversations Conversation[]
+    createdAt  DateTime    @default(now())
+    brandUsers BrandUser[]
+    campaigns  Campaign[]
+}
+
+model BrandUser {
+    id      Int       @id @default(autoincrement())
+    brandId String
+    brand   Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+    userId  String
+    user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+    role    BrandRole
+    createdAt DateTime @default(now())
+    @@unique([brandId, userId])
+    @@index([brandId])
+    @@index([userId])
+}
+
+// --- Enums and Models from campaign.prisma ---
+enum CampaignGoal {
+    AWARENESS
+    PROMOTION
+    SALES
+    TRAFFIC
+}
+
+enum CampaignContentType {
+    INFLUENCER
+    UGC
+}
+
+enum CampaignStatus {
+    GENERATING
+    PENDING
+    ACTIVE
+    CANCELLED
+}
+
+enum CampaignOfferStatus {
+    PENDING
+    ACCEPTED
+    REJECTED
+}
+
+model Campaign {
+    id      String @id @default(cuid())
+    brandId String
+    brand   Brand  @relation(fields: [brandId], references: [id])
+    name    String
+    status CampaignStatus
+    conversations Conversation[]
+    goal                       CampaignGoal
+    contentType                CampaignContentType
+    creatorAmount              Int
+    creatorAgeRange            Int[]
+    audienceCountries          String[]
+    creatorInterests           Int[]
+    audienceAgeDistribution    Json
+    audienceGenderDistribution Json
+    minimumFollowers           Int                 @default(0)
+    createdAt      DateTime                           @default(now())
+    offers         CampaignOffer[]
+    creatorResults CampaignCreatorMatchmakingResult[]
+}
+
+model CampaignOffer {
+    id         String   @id @default(cuid())
+    campaignId String
+    campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+    conversation Conversation[]
+    status         CampaignOfferStatus                @default(PENDING)
+    creatorResults CampaignCreatorMatchmakingResult[]
+}
+
+model CampaignCreatorMatchmakingResult {
+    id         String        @id @default(cuid())
+    campaignId String
+    campaign   Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+    offerId    String
+    offer      CampaignOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+    influencerId String
+    influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+    overallScore            Float
+    interestScore           Float
+    influencerAgeScore      Float
+    audienceAgeScore        Float
+    audienceCountriesScore  Float
+    audienceGenderScore     Float
+    performanceMetricsScore Float
+    createdAt DateTime @default(now())
+}
+
+// --- Enums and Models from chat.prisma ---
+enum MessageSender {
+    INFLUENCER
+    BRAND
+}
+
+enum MessageType {
+    TEXT
+}
+
+model Conversation {
+    id           String         @id @unique @default(cuid())
+    influencerId String
+    influencer   Influencer     @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+    brandId      String
+    brand        Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+    campaignId   String?
+    campaign     Campaign?      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+    offerId      String?
+    offer        CampaignOffer? @relation(fields: [offerId], references: [id], onDelete: Cascade)
+    messages Message[]
+    deleted   Boolean   @default(false)
+    deletedAt DateTime?
+    createdAt DateTime  @default(now())
+    @@index([influencerId])
+    @@index([brandId])
+}
+
+model Message {
+    id String @id @unique @default(cuid())
+    conversation   Conversation? @relation(fields: [conversationId], references: [id])
+    conversationId String?
+    influencerId String
+    influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+    brandId      String
+    brand        Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+    sender MessageSender
+    type   MessageType
+    message      String?      @db.Text
+    attachmentId String?      @unique
+    attachment   StorageFile? @relation(fields: [attachmentId], references: [id])
+    read   Boolean   @default(false)
+    readAt DateTime?
+    deleted   Boolean   @default(false)
+    deletedAt DateTime?
+    createdAt DateTime  @default(now())
+    @@index([influencerId])
+    @@index([brandId])
+}
+
+// --- Enums and Models from files.prisma ---
+enum MediaType {
+    IMAGE
+    VIDEO
+    FILE
+}
+
+enum StorageProvider {
+    R2
+    S3
+}
+
+model StorageFile {
+    id String @id @default(cuid())
+    influencerId String?
+    brandId      String?
+    userId       String?
+    type      MediaType
+    mimeType  String
+    bytes     BigInt
+    provider  StorageProvider @default(R2)
+    createdAt DateTime        @default(now())
+    message Message?
+}
+
+// --- Models from other.prisma ---
+model Interest {
+    id   Int    @id @default(autoincrement())
+    name String @unique
+    createdAt DateTime @default(now())
+}
+
+// --- Models from video.prisma ---
+model InfluencerVideo {
+    id              String            @id @default(cuid())
+    postId          String // item_id
+    platform        SocialAccountType
+    socialAccount   SocialAccount     @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+    socialAccountId String
+    caption                 String? @db.Text
+    shares                  Int     @default(0)
+    saves                   Int     @default(0)
+    share_url               String? @db.Text
+    audience_countries      String? @db.Text // JSON 
+    impression_sources      String? @db.Text // JSON
+    full_video_watched_rate Float   @default(0)
+    total_time_watched      Float   @default(0)
+    embed_url               String? @db.Text
+    reach                   Int     @default(0)
+    video_duration          Float   @default(0)
+    thumbnail_url           String? @db.Text // Temporary TikTok Thumbnail
+    likes                   Int     @default(0)
+    average_time_watched    Float   @default(0)
+    video_views             Int     @default(0)
+    comments                Int     @default(0)
+    thumbnailId       String?
+    thumbnailProvider StorageProvider?
+    videoId           String?
+    videoProvider     StorageProvider?
+    downloaded     Boolean @default(false)
+    downloadFailed Boolean @default(false)
+    isAdVideo      Boolean
+    createdAt DateTime
+    @@unique([postId, platform])
+    @@index([socialAccountId, isAdVideo, createdAt])
+    @@index([socialAccountId])
+    @@index([isAdVideo])
+    @@index([video_views])
+    @@index([socialAccountId, downloaded]) // New index for efficient video querying
+    @@index([socialAccountId, downloaded, video_views])
+    @@index([downloaded, video_views(sort: Desc)])
+}
+
+// --- Models from notification.prisma ---
+model Notification {
+    id String @id @default(cuid())
+    influencerId String
+    influencer   Influencer @relation(fields: [influencerId], references: [id])
+    message String
+    url     String?
+    iconId       String?
+    iconProvider StorageProvider?
+    createdAt DateTime @default(now())
+}
+
+// --- Enums and Models from social-accounts.prisma ---
+enum SocialAccountType {
+    TIKTOK
+}
+
+model SocialAccount {
+    id     String            @id @default(cuid())
+    type   SocialAccountType @default(TIKTOK)
+    active Boolean           @default(false) // Set to false when refresh token is expired or not valid
+    influencer   Influencer? @relation(fields: [influencerId], references: [id], onDelete: SetNull)
+    influencerId String?
+    socialId String
+    refreshToken          String?   @db.Text
+    refreshTokenExpiresAt DateTime?
+    accessToken           String?   @db.Text
+    accessTokenExpiresAt  DateTime?
+    lastInsightsFetchAt DateTime?
+    lastOAuthRefreshAt  DateTime?
+    fullName               String?
+    username               String
+    profilePictureId       String?
+    profilePictureProvider StorageProvider?
+    bio String? @db.Text
+    followers      Int?
+    engagementRate Float?
+    averageViews   Float?
+    medianViews    Float?
+    createdAt DateTime @default(now())
+    // TIKTOK ONLY
+    audienceCountry1               String?
+    audienceCountry1Percentage     Float?
+    audienceCountry2               String?
+    audienceCountry2Percentage     Float?
+    audienceCountry3               String?
+    audienceCountry3Percentage     Float?
+    audienceCountryOtherPercentage Float?
+    audienceMalePercentage   Float?
+    audienceFemalePercentage Float?
+    audienceOtherPercentage  Float?
+    audience18Percentage Float?
+    audience25Percentage Float?
+    audience35Percentage Float?
+    audience45Percentage Float?
+    audience55Percentage Float?
+    influencerVideos InfluencerVideo[]
+    @@unique([type, socialId])
+    @@index([type])
+    @@index([active])
+    @@index([socialId])
+    @@index([followers])
+    @@index([engagementRate])
+    @@index([averageViews])
+    @@index([medianViews])
+    @@index([influencerId, type, active])
+    @@index([type, username])
+    @@index([influencerId, type, followers])
+    @@index([influencerId, type, engagementRate])
+    @@index([influencerId, type, medianViews])
+}
+
