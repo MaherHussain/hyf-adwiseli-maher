@@ -12,6 +12,7 @@
 		"rootDir": "src",
 		"sourceMap": true,
 		"baseUrl": "./src",
+		"types": ["node", "express"],
 
 		"paths": {
 			"@/routes/*": ["routes/*"],
